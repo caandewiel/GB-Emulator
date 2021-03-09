@@ -7,13 +7,10 @@
 #include <vector>
 
 #include "GameBoy.h"
-#include "Disassembler.h"
 
 int main() {
     GameBoy gameBoy;
     gameBoy.loadRom("/Users/christian/GB-Emulator/cpu_instrs.gb");
     gameBoy.run();
-
-    std::cout << "Read ROM" << std::endl;
 }
 
