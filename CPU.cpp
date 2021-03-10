@@ -11,10 +11,12 @@ void CPU::run() {
 }
 
 void CPU::executeOperation(uint8_t operation) {
-    printf("| PC 0x%04x | OP 0x%02x | ", this->registers.programCounter, operation);
-    printf("AF: %04x | BC: %04x | DE: %04x | HL: %04x | SP: %04x | PC: %04x |\n", this->registers.af, this->registers.bc,
-           this->registers.de, this->registers.hl, this->registers.stackPointer,
-           this->registers.programCounter);
+//    if (this->registers.programCounter == 0x074e) {
+        printf("| PC 0x%04x | OP 0x%02x | ", this->registers.programCounter, operation);
+        printf("AF: %04x | BC: %04x | DE: %04x | HL: %04x | SP: %04x | PC: %04x |\n", this->registers.af, this->registers.bc,
+               this->registers.de, this->registers.hl, this->registers.stackPointer,
+               this->registers.programCounter);
+//    }
 
     this->registers.programCounter++;
 
@@ -28,17 +30,55 @@ void CPU::executeOperation(uint8_t operation) {
         case 0x03:
             this->registers.bc++;
             break;
-        case 0x18:
-            this->registers.programCounter += loadNextByte();
+        case 0x05:
+            this->registers.b--;
+            this->registers.setZeroFlag(this->registers.b == 0);
+            this->registers.setSubtractFlag(true);
+            this->registers.setHalfCarryFlag((this->registers.b & 0x0F) == 0x0F);
             break;
+        case 0x06:
+            this->registers.b = loadNextByte();
+            break;
+        case 0x0e:
+            this->registers.c = loadNextByte();
+            break;
+        case 0x11:
+            this->registers.de = loadNextWord();
+            break;
+        case 0x13:
+            this->registers.de++;
+            break;
+        case 0x18:
+            this->registers.programCounter += static_cast<int8_t>(loadNextByte());
+            break;
+        case 0x1a:
+            this->registers.a = loadFromMemoryBus(this->registers.de);
+            break;
+        case 0x20: {
+            auto value = static_cast<int8_t>(loadNextByte());
+            if (!this->registers.isZeroFlagSet()) {
+                this->registers.programCounter += value;
+            }
+            break;
+        }
         case 0x21:
             this->registers.hl = loadNextWord();
+            break;
+        case 0x22:
+            storeMemory(this->registers.hl, this->registers.a);
+            this->registers.a++;
             break;
         case 0x23:
             this->registers.hl++;
             break;
+        case 0x24:
+            this->registers.h++;
+            this->registers.setZeroFlag(this->registers.h == 0);
+            this->registers.setSubtractFlag(false);
+            this->registers.setHalfCarryFlag((this->registers.h & 0x0F) == 0x00);
+            break;
         case 0x28: {
-            auto value = loadNextByte();
+            auto value = static_cast<int8_t>(loadNextByte());
 
             if (this->registers.isZeroFlagSet()) {
                 this->registers.programCounter += value;
@@ -47,18 +87,31 @@ void CPU::executeOperation(uint8_t operation) {
             break;
         }
         case 0x2a:
-            this->registers.a = this->registers.hl;
+            this->registers.a = loadFromMemoryBus(this->registers.hl);
             this->registers.hl++;
+            break;
+        case 0x2c:
+            this->registers.l++;
+            this->registers.setZeroFlag(this->registers.l == 0);
+            this->registers.setSubtractFlag(false);
+            this->registers.setHalfCarryFlag((this->registers.l & 0x0F) == 0x00);
+
             break;
         case 0x31:
             this->registers.stackPointer = loadNextWord();
             break;
         case 0x3c:
             this->registers.a++;
+            this->registers.setZeroFlag(this->registers.a == 0);
             this->registers.setSubtractFlag(false);
+            this->registers.setHalfCarryFlag((this->registers.a & 0x0F) == 0x00);
+
             break;
         case 0x3e:
             this->registers.a = loadNextByte();
+            break;
+        case 0x77:
+            storeMemory(this->registers.hl, this->registers.a);
             break;
         case 0x78:
             this->registers.a = this->registers.b;
@@ -69,6 +122,13 @@ void CPU::executeOperation(uint8_t operation) {
         case 0x7d:
             this->registers.a = this->registers.l;
             break;
+        case 0xa9:
+            this->registers.a ^= this->registers.c;
+            this->registers.setZeroFlag(this->registers.a == 0);
+            this->registers.setSubtractFlag(false);
+            this->registers.setHalfCarryFlag(false);
+            this->registers.setCarryFlag(false);
+            break;
         case 0xb1:
             this->registers.a |= this->registers.c;
             this->registers.setZeroFlag(this->registers.a == 0);
@@ -76,9 +136,21 @@ void CPU::executeOperation(uint8_t operation) {
             this->registers.setHalfCarryFlag(false);
             this->registers.setCarryFlag(false);
             break;
+        case 0xc1:
+            this->registers.bc = popFromStack();
+            break;
         case 0xc3:
             this->registers.programCounter = loadNextWord();
             break;
+        case 0xc4: {
+            auto value = loadNextWord();
+
+            if (!this->registers.isZeroFlagSet()) {
+                pushToStack(this->registers.programCounter);
+                this->registers.programCounter = value;
+            }
+            break;
+        }
         case 0xc5:
             this->pushToStack(this->registers.bc);
             break;
@@ -101,6 +173,13 @@ void CPU::executeOperation(uint8_t operation) {
         case 0xe5:
             pushToStack(this->registers.hl);
             break;
+        case 0xe6:
+            this->registers.a &= loadNextByte();
+            this->registers.setZeroFlag(this->registers.a == 0);
+            this->registers.setSubtractFlag(false);
+            this->registers.setHalfCarryFlag(true);
+            this->registers.setCarryFlag(false);
+            break;
         case 0xea:
             storeMemory(loadNextWord(), this->registers.a);
             break;
@@ -116,6 +195,17 @@ void CPU::executeOperation(uint8_t operation) {
         case 0xf5:
             pushToStack(this->registers.af);
             break;
+        case 0xfa:
+            this->registers.a = loadFromMemoryBus(loadNextWord());
+            break;
+        case 0xfe: {
+            auto value = this->loadNextByte();
+            this->registers.setZeroFlag(static_cast<uint8_t>(this->registers.a - value) == 0);
+            this->registers.setSubtractFlag(true);
+            this->registers.setHalfCarryFlag(((value & 0xf) - (this->registers.a & 0xf)) < 0);
+            this->registers.setCarryFlag(this->registers.a < value);
+            break;
+        }
         default:
             printf("AF: %x \nBC: %x \nDE: %x \nHL: %x\nSP: %x\nPC: %x\n", this->registers.af, this->registers.bc,
                    this->registers.de, this->registers.hl, this->registers.stackPointer,
